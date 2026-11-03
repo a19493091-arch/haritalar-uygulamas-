@@ -114,6 +114,17 @@
   .empty{color:var(--muted);font-size:14px;padding:6px 2px}
   .note{color:var(--muted);font-size:13px;margin:8px 2px}
 
+  .adm{display:grid;grid-template-columns:auto 1fr;gap:0;background:var(--tile);border-radius:14px;overflow:hidden;margin:4px 0 14px}
+  .adm dt,.adm dd{margin:0;padding:10px 12px;font-size:15px;border-top:1px solid var(--line)}
+  .adm dt{color:var(--muted);white-space:nowrap}
+  .adm dd{font-weight:600;min-width:0;overflow-wrap:anywhere;text-align:right}
+  .adm dt:first-of-type,.adm dt:first-of-type+dd{border-top:none}
+  .here{display:flex;align-items:center;gap:12px;background:var(--tile);border-radius:14px;padding:12px;cursor:pointer;margin-top:2px;width:100%;border:none;text-align:left}
+  .here .bubble{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;flex:none;color:#fff;background:#0a7cff}
+  .here .bubble svg{width:18px;height:18px}
+  .here .txt{flex:1;min-width:0}
+  .here .n{font-size:13px;color:var(--muted)}
+  .here .a{font-size:15px;font-weight:600;color:var(--fg)}
   .vh{display:flex;align-items:flex-start;gap:10px;padding-bottom:6px}
   .vh h2{flex:1;min-width:0;margin:0;font-size:24px;line-height:1.2;text-wrap:balance}
   .close{width:32px;height:32px;border-radius:50%;border:none;background:var(--tile);color:var(--muted);display:grid;place-items:center;cursor:pointer;flex:none}
@@ -245,6 +256,7 @@
         <button class="avatar" id="avatar" aria-label="Profil ve ayarlar"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1.2-3.5 4-5 7-5s5.8 1.5 7 5"/></svg></button>
       </div>
       <div id="home">
+        <button class="here" id="here" hidden><span class="bubble"></span><span class="txt"><span class="n">Konumun</span><div class="a" id="hereTxt"></div></span></button>
         <div class="sec">Yerler</div>
         <div class="places" id="places"></div>
         <div class="sec">Son Arananlar</div>
@@ -261,6 +273,7 @@
     <div class="view" data-view="place" hidden>
       <div class="vh dragzone"><h2 id="pName"></h2><button class="close" id="pClose" aria-label="Kapat"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <p class="sub" id="pAddr"></p>
+      <dl class="adm" id="pAdm" hidden></dl>
       <div class="btnrow" style="margin-bottom:8px"><button class="btn primary" id="pRoute">Yol Tarifi</button></div>
       <div class="btnrow" id="pSave"></div>
     </div>
@@ -364,7 +377,8 @@ const map = new maplibregl.Map({
   center:[28.98,41.03], zoom:10, maxPitch:0, attributionControl:false
 });
 map.addControl(new maplibregl.AttributionControl({compact:true,customAttribution:"Uydu © Esri, Maxar, Earthstar Geographics"}),"top-left");
-map.once("idle",()=>document.querySelectorAll(".maplibregl-ctrl-attrib").forEach(el=>el.classList.remove("maplibregl-compact-show")));
+const collapseAttrib=()=>document.querySelectorAll(".maplibregl-ctrl-attrib").forEach(el=>el.classList.remove("maplibregl-compact-show"));
+map.once("load",collapseAttrib); map.once("idle",collapseAttrib);
 let mapReady=false; const readyQ=[]; const whenReady=f=>mapReady?f():readyQ.push(f);
 const EMPTY={type:"FeatureCollection",features:[]};
 const lineFC=(c,p={})=>({type:"FeatureCollection",features:c?[{type:"Feature",properties:p,geometry:{type:"LineString",coordinates:c.map(xy)}}]:[]});
@@ -493,10 +507,19 @@ function drawMe(){
   const cone=myMarker.getElement().querySelector(".cone");
   if(myHeading!=null){ cone.hidden=false; myMarker.setRotation(myHeading); } else cone.hidden=true;
 }
+let hereAt=null, hereT=0, herePlace=null;
+async function updateHere(){
+  if(!myLL) return; if(hereAt && hav(hereAt,myLL)<150) return; if(Date.now()-hereT<15000) return;
+  hereAt=myLL.slice(); hereT=Date.now();
+  const r=await reverse(myLL); if(!r) return;
+  herePlace={name:r.name,addr:r.addr,adm:r.adm,ll:hereAt};
+  const a=r.adm; $("hereTxt").textContent = a ? [a.mahalle,a.ilce,a.il,a.ulke].filter(Boolean).join(", ") : r.addr;
+  $("here").hidden=false;
+}
 function onPos(p){
   myLL=[p.coords.latitude,p.coords.longitude]; myAcc=p.coords.accuracy; store.set("lastLL",myLL);
   if(p.coords.heading!=null && !isNaN(p.coords.heading) && (p.coords.speed||0)>1) myHeading=p.coords.heading;
-  drawMe(); $("bLocate").classList.add("active");
+  drawMe(); $("bLocate").classList.add("active"); updateHere();
   if(wantCenter){ wantCenter=false; clearPad(); map.flyTo({center:xy(myLL),zoom:Math.max(map.getZoom(),15.5),offset:padOffset(),duration:1200}); }
   if(nav.active && !nav.sim) navUpdate(myLL);
   points.forEach(pt=>{ if(pt.me) pt.ll=myLL; });
@@ -547,6 +570,8 @@ map.on("moveend",debounce(updateWeather,1200));
 /* ================= Kayıtlı yerler & son aramalar ================= */
 let saved=store.get("places",{home:null,work:null,favs:[]});
 let recents=store.get("recent",[]);
+function updateStored(p){ const same=x=>x&&hav(x.ll,p.ll)<30;
+  [saved.home,saved.work,...saved.favs,...recents].forEach(x=>{ if(same(x)&&!x.adm){ x.adm=p.adm; if(!x.addr) x.addr=p.addr; } }); saveAll(); }
 function saveAll(){ store.set("places",saved); store.set("recent",recents); }
 function addRecent(p){ recents=[p,...recents.filter(r=>r.name!==p.name||hav(r.ll,p.ll)>50)].slice(0,10); saveAll(); renderHome(); }
 function distTo(ll){ return myLL ? fmtDist(hav(myLL,ll)) : ""; }
@@ -567,12 +592,38 @@ function renderHome(){
 
 /* ================= Arama ================= */
 let pick=null;   // "home" | "work" | "fav" | null
-function nameOf(r){ const parts=r.display_name.split(",").map(s=>s.trim());
-  return {name:r.name||parts[0], addr:parts.slice(r.name&&r.name!==parts[0]?0:1,4).join(", ")}; }
+// Nominatim adres alanlarını Türkiye idari yapısına çevirir: Ülke > İl > İlçe > Mahalle/Köy > Cadde/Sokak
+function admOf(a){
+  if(!a) return null;
+  const bolge=v=>/bölgesi$/i.test(v||"");
+  let il=a.province||(!bolge(a.state)?a.state:"")||a.city||"";
+  let ilce=a.county||a.district||a.town||a.city_district||a.municipality||"";
+  if(!ilce && a.city && a.city!==il) ilce=a.city;
+  if(ilce===il && a.town && a.town!==il) ilce=a.town;
+  if(ilce===il) ilce="";
+  let mahalle=a.suburb||a.neighbourhood||a.quarter||a.village||a.hamlet||a.residential||"";
+  if(mahalle===ilce||mahalle===il) mahalle="";
+  const yol=a.road||a.pedestrian||a.footway||a.path||"";
+  const sokak=yol ? yol+(a.house_number?" No:"+a.house_number:"") : "";
+  return {ulke:a.country||"", il, ilce, mahalle, sokak, posta:a.postcode||""};
+}
+function admLine(adm,skip){ if(!adm) return "";
+  const out=[]; [adm.sokak,adm.mahalle,adm.ilce,adm.il,adm.ulke].forEach(v=>{ if(v && v!==skip && !out.includes(v)) out.push(v); });
+  return out.join(", "); }
+function nameOf(r){
+  const parts=(r.display_name||"").split(",").map(s=>s.trim()).filter(Boolean);
+  const adm=admOf(r.address);
+  const name=r.name||(adm&&(adm.sokak||adm.mahalle||adm.ilce||adm.il))||parts[0]||"Konum";
+  let addr=adm ? admLine(adm,name) : parts.filter(x=>x!==name).slice(0,5).join(", ");
+  if(adm){ const kind = name===adm.il?"İl" : name===adm.ilce?"İlçe" : (name===adm.mahalle && /mahalle/i.test(name))?"" : name===adm.mahalle?"Mahalle / Köy" : "";
+    if(kind) addr = kind+" · "+addr; }
+  return {name, addr, adm};
+}
+const plain=p=>({name:p.name,addr:p.addr,adm:p.adm||null,ll:p.ll});
 async function geocode(q,limit=8){
   const b=map.getBounds();
   const vb=[b.getWest()-1,b.getNorth()+1,b.getEast()+1,b.getSouth()-1].map(v=>v.toFixed(3)).join(",");
-  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=${limit}&accept-language=tr&countrycodes=tr&viewbox=${vb}&q=${encodeURIComponent(q)}`;
+  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=${limit}&accept-language=tr&countrycodes=tr&viewbox=${vb}&q=${encodeURIComponent(q)}`;
   const r=await fetch(url); return r.json();
 }
 function openSearch(){ $("home").hidden=true; $("results").hidden=false; $("qCancel").hidden=false; $("avatar").hidden=true;
@@ -590,7 +641,7 @@ function renderResults(list){
     li.onclick=()=>choose(p); ul.appendChild(li); });
 }
 function choose(p){
-  const place={name:p.name,addr:p.addr,ll:p.ll};
+  const place=plain(p);
   if(pick){ const k=pick; pick=null;
     if(k==="fav") saved.favs=[...saved.favs.filter(f=>f.name!==place.name),place]; else saved[k]=place;
     saveAll(); closeSearch(); renderHome(); toast(k==="home"?"Ev kaydedildi":k==="work"?"İş kaydedildi":"Yer kaydedildi"); return; }
@@ -607,6 +658,8 @@ $("q").addEventListener("focus",openSearch);
 $("q").addEventListener("input",()=>doSearch($("q").value));
 $("q").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const f=$("resList").querySelector("li"); if(f && f.onclick) f.click(); } });
 $("qCancel").onclick=closeSearch;
+$("here").querySelector(".bubble").innerHTML=ICON.pin;
+$("here").onclick=()=>{ if(herePlace) showPlace({...herePlace}); };
 $("avatar").onclick=()=>show("settings","full");
 $("sClose").onclick=()=>show("browse","mid");
 $("clrRecent").onclick=()=>{ recents=[]; saveAll(); renderHome(); toast("Son aramalar temizlendi"); };
@@ -626,19 +679,28 @@ $("clrPlaces").onclick=()=>{ saved={home:null,work:null,favs:[]}; saveAll(); ren
 /* ================= Yer kartı ================= */
 let selMarker=null, curPlace=null;
 function pinEl(color,label=""){ const el=document.createElement("div"); el.className="pinm"; el.style.background=color; el.innerHTML=`<span>${label}</span>`; return el; }
-function showPlace(p){
+function renderAdm(p){
+  const dl=$("pAdm"), a=p.adm; dl.innerHTML="";
+  const rows=[["Ülke",a&&a.ulke],["İl",a&&a.il],["İlçe",a&&a.ilce],["Mahalle / Köy",a&&a.mahalle],["Cadde / Sokak",a&&a.sokak],["Posta kodu",a&&a.posta],
+    ["Koordinat",`${p.ll[0].toFixed(5)}, ${p.ll[1].toFixed(5)}`]];
+  rows.forEach(([k,v],i)=>{ if(!v && i>2) return; dl.insertAdjacentHTML("beforeend",`<dt>${k}</dt><dd>${esc(v||(a?"—":"Yükleniyor…"))}</dd>`); });
+  dl.hidden=false;
+}
+function showPlace(p,keepCam){
   curPlace=p; show("place","mid");
   $("pName").textContent=p.name; $("pAddr").textContent=[p.addr,distTo(p.ll)].filter(Boolean).join(" · ");
+  renderAdm(p);
+  if(!p.adm){ reverse(p.ll).then(r=>{ if(r && r.adm){ p.adm=r.adm; if(!p.addr||/^[\d.,\s-]+$/.test(p.addr)) p.addr=r.addr; updateStored(p); if(curPlace===p) showPlace(p,true); } }); }
   if(selMarker) selMarker.remove();
   selMarker=new maplibregl.Marker({element:pinEl("#e5383b"),anchor:"bottom-left",offset:[-4,4]}).setLngLat(xy(p.ll)).addTo(map);
-  clearPad(); map.flyTo({center:xy(p.ll),zoom:Math.max(map.getZoom(),15),offset:padOffset(),duration:1000});
+  if(!keepCam){ clearPad(); map.flyTo({center:xy(p.ll),zoom:Math.max(map.getZoom(),15),offset:padOffset(),duration:1000}); }
   const isHome=saved.home&&hav(saved.home.ll,p.ll)<30, isWork=saved.work&&hav(saved.work.ll,p.ll)<30, isFav=saved.favs.some(f=>hav(f.ll,p.ll)<30);
   const box=$("pSave"); box.innerHTML="";
   const b=(t,fn,cls="")=>{ const x=document.createElement("button"); x.className="btn "+cls; x.textContent=t; x.onclick=fn; box.appendChild(x); };
-  if(isFav) b("Kayıttan çıkar",()=>{ saved.favs=saved.favs.filter(f=>hav(f.ll,p.ll)>=30); saveAll(); renderHome(); showPlace(p); },"danger");
-  else b("☆ Kaydet",()=>{ saved.favs.push({name:p.name,addr:p.addr,ll:p.ll}); saveAll(); renderHome(); toast("Kaydedildi"); showPlace(p); });
-  if(!isHome) b("Ev yap",()=>{ saved.home={name:p.name,addr:p.addr,ll:p.ll}; saveAll(); renderHome(); toast("Ev kaydedildi"); showPlace(p); });
-  if(!isWork) b("İş yap",()=>{ saved.work={name:p.name,addr:p.addr,ll:p.ll}; saveAll(); renderHome(); toast("İş kaydedildi"); showPlace(p); });
+  if(isFav) b("Kayıttan çıkar",()=>{ saved.favs=saved.favs.filter(f=>hav(f.ll,p.ll)>=30); saveAll(); renderHome(); showPlace(p,true); },"danger");
+  else b("☆ Kaydet",()=>{ saved.favs.push(plain(p)); saveAll(); renderHome(); toast("Kaydedildi"); showPlace(p,true); });
+  if(!isHome) b("Ev yap",()=>{ saved.home=plain(p); saveAll(); renderHome(); toast("Ev kaydedildi"); showPlace(p,true); });
+  if(!isWork) b("İş yap",()=>{ saved.work=plain(p); saveAll(); renderHome(); toast("İş kaydedildi"); showPlace(p,true); });
   $("pRoute").textContent="Yol Tarifi";
   if(myLL){ const req=p; osrm("car",[myLL,p.ll],false).then(r=>{ if(curPlace===req) $("pRoute").textContent="🚗 "+fmtTime(r.duration)+" · Yol Tarifi"; }).catch(()=>{}); }
 }
@@ -659,10 +721,10 @@ async function dropPin(lngLat){
   const p={name:"İşaretli Konum",addr:`${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`,ll:[lngLat.lat,lngLat.lng]};
   if(navigator.vibrate) navigator.vibrate(15);
   showPlace(p);
-  const r=await reverse(p.ll); if(r && curPlace===p){ p.name=r.name; p.addr=r.addr; showPlace(p); }
+  const r=await reverse(p.ll); if(r && curPlace===p){ p.name=r.name; p.addr=r.addr; p.adm=r.adm; showPlace(p,true); }
 }
 async function reverse(ll){ try{
-  const r=await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=tr&lat=${ll[0]}&lon=${ll[1]}`)).json();
+  const r=await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&accept-language=tr&lat=${ll[0]}&lon=${ll[1]}`)).json();
   return r && r.display_name ? nameOf(r) : null; }catch(e){ return null; } }
 
 /* ================= Yol tarifi ================= */
