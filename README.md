@@ -16,6 +16,7 @@ OmniFlow Harita uygulaması - akıllı yol tarifi ve navigasyon
 - Yol tarifi: durak ekleme, araç / otobüs / metrobüs / bisiklet / yaya süreleri, Türkçe adım adım tarif
 - Navigasyon: sonraki dönüşe kalan mesafe, varış saati, kalan süre ve km; rotadan çıkınca yeniden hesaplama
 - 3D modda binalar OpenStreetMap'teki yükseklik ve kat bilgisine göre çizilir
+- Geniş ekranda ve yatay telefonda soldaki panel "‹" düğmesiyle ekranın dışına gizlenir, "›" ile geri gelir
 - Telefon, tablet, iPhone, Surface Duo (çift ekran) ve bilgisayar uyumlu; ana ekrana eklenebilir (PWA)
 
 ## Kullanılan servisler (ücretsiz, anahtar gerektirmez)

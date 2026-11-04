@@ -192,6 +192,9 @@
   #blurBox{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
   .blurmask{position:absolute;inset:0;pointer-events:none;background:rgba(128,132,128,.12);
     -webkit-backdrop-filter:blur(var(--b,16px)) saturate(.85);backdrop-filter:blur(var(--b,16px)) saturate(.85)}
+  #panelTab{display:none;position:absolute;top:10px;right:-50px;width:40px;height:56px;border:none;border-radius:14px;cursor:pointer;place-items:center;
+    background:var(--btn);color:var(--btn-fg);box-shadow:var(--shadow);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);font-size:26px;font-weight:600;line-height:1}
+  #panelTab:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   #toast{position:fixed;z-index:40;left:50%;top:calc(env(safe-area-inset-top,0px) + 64px);transform:translateX(-50%);background:rgba(20,20,22,.9);color:#fff;
     padding:9px 16px;border-radius:20px;font-size:14px;max-width:calc(100vw - 32px);text-align:center}
   .maplibregl-ctrl-top-left{top:calc(env(safe-area-inset-top,0px) + 54px);left:env(safe-area-inset-left,0px)}
@@ -209,6 +212,11 @@
     .maplibregl-ctrl-top-left{top:auto;bottom:8px;left:auto;right:calc(env(safe-area-inset-right,0px) + 8px)}
     #nav{left:404px;max-width:none;margin:0}
     body.sheet-high .fabs{opacity:1;pointer-events:auto}
+    /* Paneli sola, ekranın dışına gizleme */
+    #sheet{transition:transform .3s ease}
+    body.panel-hidden #sheet{transform:translateX(calc(-100% - 14px - env(safe-area-inset-left,0px)))}
+    body.panel-hidden #nav{left:calc(env(safe-area-inset-left,0px) + 60px)}
+    #panelTab{display:grid}
   }
   @media (orientation:landscape) and (max-height:520px){ #sheet{width:330px} #nav{left:356px} }
   /* --- Çift ekran (Surface Duo vb.) --- */
@@ -216,6 +224,7 @@
     #sheet{top:0;left:0;bottom:0;width:env(viewport-segment-width 0 0,50vw);max-height:none;border-radius:0}
     #nav{left:calc(env(viewport-segment-left 1 0,50vw) + 10px)}
   }
+  @media (horizontal-viewport-segments:2){ body.panel-hidden #sheet{transform:translateX(-100%)} body.panel-hidden #nav{left:60px} }
   @media (prefers-reduced-motion:reduce){ #sheet,.fabs{transition:none} }
 </style>
 </head>
@@ -249,6 +258,7 @@
 </div>
 
 <section id="sheet" aria-label="Arama ve yol tarifi">
+  <button id="panelTab" aria-controls="body" aria-label="Paneli gizle" title="Paneli gizle">‹</button>
   <div class="grab dragzone" id="grab"></div>
   <div class="body" id="body">
 
@@ -546,12 +556,26 @@ addEventListener("resize",debounce(()=>{ setSnap(snap); map.resize(); },150));
 addEventListener("orientationchange",()=>setTimeout(()=>{ setSnap(snap); map.resize(); },300));
 function clearPad(){ const p=map.getPadding(); if(p.top||p.bottom||p.left||p.right) map.setPadding({top:0,bottom:0,left:0,right:0}); }
 function padOffset(){ const p=mapPad(); return [Math.round((p.left-p.right)/2), Math.round((p.top-p.bottom)/2)]; }
-function mapPad(){ const s=insets(); if(isWide()){ const w=sheet.offsetWidth; return {top:70,bottom:40,left:w+40,right:80}; }
+function mapPad(){ const s=insets(); if(isWide()){ const w=(panelHidden?0:sheet.offsetWidth); return {top:70,bottom:40,left:w+40,right:80}; }
   return {top:s.top+70,bottom:sheetPx+30,left:40,right:80}; }
 
 /* ================= Görünümler ================= */
 let view="browse";
-function show(v,s){ if(v!=="hide" && typeof hideDraft!=="undefined" && hideDraft) endHide(); view=v; document.querySelectorAll(".view").forEach(el=>el.hidden=el.dataset.view!==v);
+/* ---- Paneli sola gizle / geri getir (geniş ekranda) ---- */
+let panelHidden=store.get("panelHidden",false);
+function applyPanel(){
+  const on=panelHidden && isWide();
+  document.body.classList.toggle("panel-hidden",on);
+  $("body").inert=on;
+  $("panelTab").textContent=on?"›":"‹";
+  const t=on?"Paneli göster":"Paneli gizle"; $("panelTab").setAttribute("aria-label",t); $("panelTab").title=t;
+  $("panelTab").setAttribute("aria-expanded",String(!on));
+}
+function setPanelHidden(h){ panelHidden=h; store.set("panelHidden",h); applyPanel(); }
+$("panelTab").onclick=()=>setPanelHidden(!panelHidden);
+addEventListener("resize",debounce(applyPanel,150));
+function show(v,s){ if(v!=="browse" && panelHidden && isWide()) setPanelHidden(false);
+  if(v!=="hide" && typeof hideDraft!=="undefined" && hideDraft) endHide(); view=v; document.querySelectorAll(".view").forEach(el=>el.hidden=el.dataset.view!==v);
   $("body").scrollTop=0; if(s) setSnap(s); else setSnap(snap); }
 
 /* ================= Konum & pusula ================= */
@@ -1232,7 +1256,7 @@ $("simNav").onclick=()=>startNav(true);
 $("stopNav").onclick=()=>stopNav(false);
 
 /* ================= Başlangıç ================= */
-show("browse","mid"); renderHome(); renderModes();
+show("browse","mid"); renderHome(); renderModes(); applyPanel();
 if(myLL) map.jumpTo({center:xy(myLL),zoom:14});
 // Konum izni daha önce verildiyse hemen başlat; verilmediyse kullanıcı konum düğmesine bastığında sorulur
 if(navigator.permissions && navigator.permissions.query){
