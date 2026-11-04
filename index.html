@@ -508,7 +508,9 @@ document.addEventListener("pointerdown",e=>{ if(!$("layersPop").hidden && !e.tar
 applyMapType(mapType);
 
 /* ---- 2D / 3D ---- */
-function set3D(on){
+// 2D'ye geçerken eğim sıfırlanınca eğmeyi kilitle (animasyonu yarıda kesmeden)
+function lockFlatWhenDone(){ const h=()=>{ if(is3D){ map.off("moveend",h); return; } if(map.getPitch()<0.5){ map.off("moveend",h); map.setMaxPitch(0); } }; map.on("moveend",h); }
+function set3D(on,cam){
   is3D=on; $("b3d").textContent=on?"2D":"3D"; $("b3d").setAttribute("aria-label",on?"2D görünüm":"3D görünüm");
   whenReady(()=>{
     map.setLayoutProperty("bina-3d","visibility",on?"visible":"none");
@@ -517,7 +519,7 @@ function set3D(on){
     if(on){ map.setMaxPitch(85); const z=map.getZoom();
       map.easeTo({pitch:60,bearing:map.getBearing()||-20,zoom:z<15?16.2:z,duration:1100});
       toast(z<15?"3D: binalar yükseklikleriyle gösteriliyor":"İki parmakla eğip döndürebilirsin");
-    } else { map.easeTo({pitch:0,bearing:0,duration:700}); setTimeout(()=>{ if(!is3D) map.setMaxPitch(0); },750); }
+    } else { map.easeTo({pitch:0,bearing:0,duration:700,...(cam||{})}); lockFlatWhenDone(); }
   });
 }
 $("b3d").onclick=()=>set3D(!is3D);
@@ -1015,12 +1017,28 @@ $("pClose").onclick=()=>{ if(selMarker){ selMarker.remove(); selMarker=null; } c
 $("pRoute").onclick=()=>{ if(curPlace) routeTo(curPlace); };
 
 /* Haritada basılı tutma: işaret bırak */
-let lp=null;
+let lp=null, lpReady=null;
 map.on("touchstart",e=>{ if(e.originalEvent.touches.length!==1) return; const pt=e.point, ll=e.lngLat;
-  clearTimeout(lp&&lp.t); lp={pt,t:setTimeout(()=>{ lp=null; dropPin(ll); },550)}; });
+  clearTimeout(lp&&lp.t); lpReady=null; lp={pt,t:setTimeout(()=>{ lp=null; lpReady=ll; if(navigator.vibrate) navigator.vibrate(12); },550)}; });
 map.on("touchmove",e=>{ if(lp && (Math.abs(e.point.x-lp.pt.x)>10||Math.abs(e.point.y-lp.pt.y)>10)){ clearTimeout(lp.t); lp=null; } });
-["touchend","touchcancel","dragstart","zoomstart"].forEach(ev=>map.on(ev,()=>{ if(lp){ clearTimeout(lp.t); lp=null; } }));
-map.on("contextmenu",e=>dropPin(e.lngLat));
+["touchcancel","dragstart","zoomstart"].forEach(ev=>map.on(ev,()=>{ if(lp){ clearTimeout(lp.t); lp=null; } lpReady=null; }));
+// Parmak kalkınca uygula (haritanın kendi dokunma işlemesi kamera hareketini yarıda kesmesin)
+map.on("touchend",()=>{ if(lp){ clearTimeout(lp.t); lp=null; } if(lpReady){ const ll=lpReady; lpReady=null; setTimeout(()=>longPress(ll),40); } });
+// Bilgisayarda sağ tık: sağ tıkla sürükleyip döndürmeyi bozmamak için sadece düz haritada işaret bırakır
+map.on("contextmenu",e=>{ if(!isTilted()) dropPin(e.lngLat); });
+/* Basılı tutma: harita eğik / döndürülmüş / 3D ise kamera yükselip normal üstten görünüme döner; zaten normalse işaret bırakır */
+function isTilted(){ return is3D || map.getPitch()>1 || Math.abs(map.getBearing())>1; }
+function riseToNormal(){
+  const z=map.getZoom(), cam={pitch:0,bearing:0,zoom:z>15?15:Math.max(z-0.5,map.getMinZoom()),duration:900};
+  clearPad();
+  if(is3D) set3D(false,cam);   // 3D binaları kapatır ve kamerayı yükseltir
+  else map.easeTo(cam);
+  toast("Normal görünüm");
+}
+function longPress(ll){
+  if(nav.active || drawOn) return;
+  if(isTilted()) riseToNormal(); else dropPin(ll);
+}
 map.on("click",e=>{ if(view==="route"){ setPointFromMap(e.lngLat); } else if(view==="hide" && !drawOn){ setHideCenter([e.lngLat.lat,e.lngLat.lng]); } });
 async function dropPin(lngLat){
   if(nav.active) return;

@@ -8,7 +8,7 @@ OmniFlow Harita uygulaması - akıllı yol tarifi ve navigasyon
 - Alttan kaydırılan panel: arama (sesle arama destekli), profil/ayarlar
 - **Yerler:** Ev, İş ve kayıtlı yerler; tek dokunuşla yol tarifi
 - **Son Arananlar**
-- Haritada basılı tutarak işaret bırakma
+- Haritada basılı tutma: harita eğik, döndürülmüş veya 3D ise kamera yükselip normal üstten görünüme döner; zaten normalse oraya işaret bırakır
 - **Gizli yerler:** Seçilen yerler bulanıklaştırılır veya bulutla kapanır. Alan elle çizilebilir ya da daire olarak seçilebilir
 - **Herkes için gizli alanlar:** `gizli-alanlar.json` dosyasındaki alanlar uygulamayı açan herkeste gizlidir ve uygulamadan kaldırılamaz
 - **Askeri alanlar:** OpenStreetMap'te askeri alan olarak işaretli bölgeler, askeri havalimanları ve savunma sanayi tesisleri her zaman bulutla kapalıdır
