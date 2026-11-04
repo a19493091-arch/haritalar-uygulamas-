@@ -9,6 +9,7 @@ OmniFlow Harita uygulaması - akıllı yol tarifi ve navigasyon
 - **Yerler:** Ev, İş ve kayıtlı yerler; tek dokunuşla yol tarifi
 - **Son Arananlar**
 - Haritada basılı tutarak işaret bırakma
+- **Gizli yerler:** Seçilen özel yerlerin üstü haritada bulutla kapanır (2D, uydu ve 3D); sadece bu cihazda saklanır
 - Tam adres: Ülke, İl, İlçe, Mahalle/Köy, Cadde/Sokak, Posta kodu (arama sonuçları, yer kartı, son arananlar ve "Konumun" satırı)
 - Yol tarifi: durak ekleme, araç / otobüs / metrobüs / bisiklet / yaya süreleri, Türkçe adım adım tarif
 - Navigasyon: sonraki dönüşe kalan mesafe, varış saati, kalan süre ve km; rotadan çıkınca yeniden hesaplama

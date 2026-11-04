@@ -125,6 +125,11 @@
   .here .txt{flex:1;min-width:0}
   .here .n{font-size:13px;color:var(--muted)}
   .here .a{font-size:15px;font-weight:600;color:var(--fg)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+  .chip{border:none;border-radius:20px;padding:8px 14px;font-size:15px;cursor:pointer;background:var(--tile);color:var(--fg);min-height:40px}
+  .chip.on{background:var(--accent);color:var(--accent-fg);font-weight:600}
+  .textin{width:100%;border:none;border-radius:12px;background:var(--tile);color:var(--fg);font-size:16px;padding:12px;font-family:inherit;outline:none;margin-bottom:12px}
+  .hidelabel{background:rgba(255,255,255,.92);color:#3a4250;font-size:12px;font-weight:600;padding:3px 9px;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.2);white-space:nowrap;pointer-events:none}
   .vh{display:flex;align-items:flex-start;gap:10px;padding-bottom:6px}
   .vh h2{flex:1;min-width:0;margin:0;font-size:24px;line-height:1.2;text-wrap:balance}
   .close{width:32px;height:32px;border-radius:50%;border:none;background:var(--tile);color:var(--muted);display:grid;place-items:center;cursor:pointer;flex:none}
@@ -278,6 +283,7 @@
       <dl class="adm" id="pAdm" hidden></dl>
       <div class="btnrow" style="margin-bottom:8px"><button class="btn primary" id="pRoute">Yol Tarifi</button></div>
       <div class="btnrow" id="pSave"></div>
+      <button class="btn" id="pHide" style="width:100%;margin-top:8px">☁️ Bu yeri bulutla gizle</button>
       <a class="btn" id="pReport" target="_blank" rel="noopener" style="width:100%;text-decoration:none;margin-top:8px">Bu yer yanlış veya eksik mi? Bildir</a>
     </div>
 
@@ -309,9 +315,26 @@
       </div>
     </div>
 
+    <!-- Gizli yer ekle -->
+    <div class="view" data-view="hide" hidden>
+      <div class="vh dragzone"><h2>Gizli yer ekle</h2><button class="close" id="hClose" aria-label="Kapat"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <p class="sub" id="hHint">Gizlemek istediğin yere haritada dokun. Seçtiğin alanın üstü bulutla kapanır.</p>
+      <div class="btnrow" style="margin-bottom:10px"><button class="btn" id="hMe">📍 Konumumu kullan</button></div>
+      <label class="note" for="hName">Adı</label>
+      <input class="textin" id="hName" placeholder="Örn. Evim" autocomplete="off">
+      <div class="note">Bulutun büyüklüğü (yarıçap)</div>
+      <div class="chips" id="hRad"></div>
+      <div class="btnrow"><button class="btn primary" id="hSave" disabled>Bulutla gizle</button></div>
+    </div>
+
     <!-- Ayarlar -->
     <div class="view" data-view="settings" hidden>
       <div class="vh dragzone"><h2>Ayarlar</h2><button class="close" id="sClose" aria-label="Kapat"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div class="sec" style="font-size:18px;margin-top:4px">Gizli yerler</div>
+      <ul class="list" id="hidList"></ul>
+      <div class="btnrow" style="margin:10px 0 4px"><button class="btn" id="hAdd">☁️ Gizli yer ekle</button></div>
+      <p class="note">Gizli yerler sadece bu cihazda, bu uygulamada bulutla kapanır. Başka haritalarda ve başka kişilerin telefonlarında görünmeye devam eder.</p>
+      <div class="sec" style="font-size:18px">Veriler</div>
       <div class="btnrow" style="flex-direction:column">
         <button class="btn danger" id="clrRecent">Son aramaları temizle</button>
         <button class="btn danger" id="clrPlaces">Kayıtlı yerleri sil</button>
@@ -418,6 +441,8 @@ map.on("load",()=>{
     paint:{"line-color":"#ffffff","line-width":["interpolate",["linear"],["zoom"],8,1.5,16,4],"line-dasharray":[0.5,2.5]}},firstSymbol);
   map.addLayer({id:"mb-line",type:"line",source:"mbline",layout:{"line-join":"round","line-cap":"round"},
     paint:{"line-color":"#d93025","line-width":["interpolate",["linear"],["zoom"],8,4,16,10],"line-opacity":.75}},firstSymbol);
+  setupHidden();
+  ["route-casing","route-line","route-dash","mb-line"].forEach(id=>map.moveLayer(id));
   mapReady=true;
   const readDate=()=>{ const src=map.getSource(bSource); const t=(src&&src.tiles&&src.tiles[0])||"";
     const m=t.match(/(20\d{2})(\d{2})(\d{2})_\d{6}/); if(!m) return false;
@@ -453,6 +478,7 @@ function set3D(on){
   is3D=on; $("b3d").textContent=on?"2D":"3D"; $("b3d").setAttribute("aria-label",on?"2D görünüm":"3D görünüm");
   whenReady(()=>{
     map.setLayoutProperty("bina-3d","visibility",on?"visible":"none");
+    map.setLayoutProperty("gizli-3d","visibility",on?"visible":"none");
     if(on){ map.setMaxPitch(85); const z=map.getZoom();
       map.easeTo({pitch:60,bearing:map.getBearing()||-20,zoom:z<15?16.2:z,duration:1100});
       toast(z<15?"3D: binalar yükseklikleriyle gösteriliyor":"İki parmakla eğip döndürebilirsin");
@@ -504,7 +530,7 @@ function mapPad(){ const s=insets(); if(isWide()){ const w=sheet.offsetWidth; re
 
 /* ================= Görünümler ================= */
 let view="browse";
-function show(v,s){ view=v; document.querySelectorAll(".view").forEach(el=>el.hidden=el.dataset.view!==v);
+function show(v,s){ if(v!=="hide" && typeof hideDraft!=="undefined" && hideDraft) endHide(); view=v; document.querySelectorAll(".view").forEach(el=>el.hidden=el.dataset.view!==v);
   $("body").scrollTop=0; if(s) setSnap(s); else setSnap(snap); }
 
 /* ================= Konum & pusula ================= */
@@ -629,6 +655,85 @@ function nameOf(r){
     if(kind) addr = kind+" · "+addr; }
   return {name, addr, adm};
 }
+/* ================= Gizli yerler (bulutla kapatma) ================= */
+let hidden=store.get("hidden",[]), hideDraft=null, hideLabels=[];
+const RADII=[100,250,500,1000];
+function circlePoly(ll,r,n=72){ const c=[], lat=ll[0]*Math.PI/180;
+  for(let i=0;i<=n;i++){ const a=i/n*2*Math.PI; c.push([ll[1]+(r*Math.sin(a))/(111320*Math.cos(lat)), ll[0]+(r*Math.cos(a))/110540]); }
+  return {type:"Polygon",coordinates:[c]}; }
+function hideFC(list){ const f=[];
+  list.forEach(h=>{ const top=Math.min(420,Math.max(140,h.r*0.7));
+    f.push({type:"Feature",properties:{k:"halo"},geometry:circlePoly(h.ll,h.r*1.22)});
+    f.push({type:"Feature",properties:{k:"core"},geometry:circlePoly(h.ll,h.r)});
+    // 3D bulut: alanı tamamen kapatan gövde + üstünde farklı boy ve yükseklikte yuvarlak "puf"lar
+    f.push({type:"Feature",properties:{k:"d",h:Math.round(top*0.55),b:0},geometry:circlePoly(h.ll,h.r*1.02,48)});
+    let seed=Math.round(Math.abs(h.ll[0]*1e5+h.ll[1]*1e5))%2147483646+1; const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+    const mLat=1/110540, mLng=1/(111320*Math.cos(h.ll[0]*Math.PI/180));
+    for(let i=0;i<16;i++){ const a=rnd()*2*Math.PI, d=Math.sqrt(rnd())*h.r*0.62, rr=h.r*(0.26+rnd()*0.3);
+      const c=[h.ll[0]+Math.cos(a)*d*mLat, h.ll[1]+Math.sin(a)*d*mLng];
+      const b=top*(0.32+rnd()*0.2), hh=b+top*(0.25+rnd()*0.35)*(1-d/(h.r*0.9));
+      f.push({type:"Feature",properties:{k:"d",h:Math.round(Math.max(hh,b+top*0.15)),b:Math.round(b)},geometry:circlePoly(c,rr,40)}); } });
+  return {type:"FeatureCollection",features:f}; }
+function cloudTexture(){
+  const S=256, c=document.createElement("canvas"); c.width=c.height=S; const g=c.getContext("2d");
+  g.fillStyle="#e4e8ee"; g.fillRect(0,0,S,S);
+  let seed=7; const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  for(let i=0;i<46;i++){ const x=rnd()*S, y=rnd()*S, r=18+rnd()*46, a=0.35+rnd()*0.5, w=Math.round(236+rnd()*19);
+    for(const dx of [-S,0,S]) for(const dy of [-S,0,S]){ const gr=g.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,r);
+      gr.addColorStop(0,`rgba(${w},${w},${Math.min(255,w+4)},${a})`); gr.addColorStop(1,"rgba(255,255,255,0)"); g.fillStyle=gr; g.fillRect(x+dx-r,y+dy-r,2*r,2*r); } }
+  return g.getImageData(0,0,S,S);
+}
+function setupHidden(){
+  if(!map.hasImage("bulut")) map.addImage("bulut",cloudTexture());
+  map.addSource("gizli",{type:"geojson",data:hideFC(hidden)});
+  map.addSource("gizli-taslak",{type:"geojson",data:EMPTY});
+  map.addLayer({id:"gizli-hale",type:"fill",source:"gizli",filter:["==",["get","k"],"halo"],paint:{"fill-color":"#eef1f5","fill-opacity":0.6}});
+  map.addLayer({id:"gizli-bulut",type:"fill",source:"gizli",filter:["==",["get","k"],"core"],paint:{"fill-pattern":"bulut","fill-opacity":1}});
+  map.addLayer({id:"gizli-kenar",type:"line",source:"gizli",filter:["==",["get","k"],"core"],
+    paint:{"line-color":"#f4f6f9","line-width":["interpolate",["linear"],["zoom"],10,4,17,26],"line-blur":["interpolate",["linear"],["zoom"],10,4,17,22],"line-opacity":0.95}});
+  map.addLayer({id:"gizli-3d",type:"fill-extrusion",source:"gizli",filter:["==",["get","k"],"d"],layout:{visibility:is3D?"visible":"none"},
+    paint:{"fill-extrusion-color":"#f6f7fa","fill-extrusion-height":["get","h"],"fill-extrusion-base":["get","b"],"fill-extrusion-opacity":0.97,"fill-extrusion-vertical-gradient":true}});
+  map.addLayer({id:"gizli-taslak",type:"line",source:"gizli-taslak",paint:{"line-color":"#0a7cff","line-width":3,"line-dasharray":[2,1.5]}});
+  drawHidden();
+}
+function drawHidden(){
+  hideLabels.forEach(m=>m.remove()); hideLabels=[];
+  hidden.forEach(h=>{ const el=document.createElement("div"); el.className="hidelabel"; el.textContent="☁️ "+(h.name||"Gizli alan");
+    hideLabels.push(new maplibregl.Marker({element:el}).setLngLat(xy(h.ll)).addTo(map)); });
+  whenReady(()=>map.getSource("gizli").setData(hideFC(hidden)));
+}
+function renderHiddenList(){
+  const ul=$("hidList"); ul.innerHTML="";
+  if(!hidden.length){ ul.innerHTML='<li style="cursor:default"><span class="empty">Henüz gizli yer yok.</span></li>'; return; }
+  hidden.forEach((h,i)=>{ const li=document.createElement("li");
+    li.innerHTML=`<span class="bubble" style="background:#8fa3bf">☁️</span><span class="txt"><div class="n">${esc(h.name||"Gizli alan")}</div><div class="a">${fmtDist(h.r)} yarıçap</div></span><button class="close" aria-label="Gizlemeyi kaldır"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+    li.querySelector(".txt").onclick=()=>{ clearPad(); map.flyTo({center:xy(h.ll),zoom:15,offset:padOffset()}); if(!isWide()) setSnap("peek"); };
+    li.querySelector("button").onclick=()=>{ hidden.splice(i,1); store.set("hidden",hidden); drawHidden(); renderHiddenList(); toast("Gizleme kaldırıldı"); };
+    ul.appendChild(li); });
+}
+function renderRadii(){ $("hRad").innerHTML=RADII.map(r=>`<button class="chip ${hideDraft&&hideDraft.r===r?"on":""}" data-r="${r}">${fmtDist(r)}</button>`).join("");
+  $("hRad").querySelectorAll(".chip").forEach(b=>b.onclick=()=>{ hideDraft.r=+b.dataset.r; renderRadii(); drawDraft(); }); }
+function drawDraft(){ whenReady(()=>map.getSource("gizli-taslak").setData(hideDraft&&hideDraft.ll?{type:"FeatureCollection",features:[{type:"Feature",properties:{},geometry:circlePoly(hideDraft.ll,hideDraft.r)}]}:EMPTY)); }
+function startHide(pre){
+  hideDraft={ll:pre?pre.ll:null, r:250, name:pre?pre.name:""};
+  if(selMarker){ selMarker.remove(); selMarker=null; }
+  show("hide","mid"); $("hName").value=hideDraft.name; renderRadii(); drawDraft();
+  $("hSave").disabled=!hideDraft.ll;
+  $("hHint").textContent = hideDraft.ll ? "Alan seçildi. İstersen haritada başka bir yere dokunarak değiştirebilirsin." : "Gizlemek istediğin yere haritada dokun. Seçtiğin alanın üstü bulutla kapanır.";
+  if(hideDraft.ll){ clearPad(); map.flyTo({center:xy(hideDraft.ll),zoom:15,offset:padOffset()}); }
+}
+async function setHideCenter(ll){
+  if(!hideDraft) return; hideDraft.ll=ll; drawDraft(); $("hSave").disabled=false;
+  $("hHint").textContent="Alan seçildi. İstersen haritada başka bir yere dokunarak değiştirebilirsin.";
+  if(!$("hName").value){ const r=await reverse(ll); if(r && hideDraft && hideDraft.ll===ll && !$("hName").value) $("hName").value=r.name; }
+}
+function endHide(){ hideDraft=null; drawDraft(); }
+$("hAdd").onclick=()=>startHide(null);
+$("hClose").onclick=()=>{ endHide(); show("settings","full"); renderHiddenList(); };
+$("hMe").onclick=()=>{ if(myLL){ setHideCenter(myLL.slice()); clearPad(); map.flyTo({center:xy(myLL),zoom:15,offset:padOffset()}); } else { startLocating(true); toast("Konum alınıyor, sonra tekrar dene."); } };
+$("hSave").onclick=()=>{ if(!hideDraft||!hideDraft.ll) return;
+  hidden.push({name:$("hName").value.trim()||"Gizli alan", ll:hideDraft.ll, r:hideDraft.r}); store.set("hidden",hidden);
+  endHide(); drawHidden(); toast("Bulutla gizlendi"); show("browse","mid"); };
 const plain=p=>({name:p.name,addr:p.addr,adm:p.adm||null,ll:p.ll});
 async function geocode(q,limit=8){
   const b=map.getBounds();
@@ -670,8 +775,9 @@ $("q").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); 
 $("qCancel").onclick=closeSearch;
 $("here").querySelector(".bubble").innerHTML=ICON.pin;
 $("here").onclick=()=>{ if(herePlace) showPlace({...herePlace}); };
-$("avatar").onclick=()=>show("settings","full");
+$("avatar").onclick=()=>{ renderHiddenList(); show("settings","full"); };
 $("sClose").onclick=()=>show("browse","mid");
+$("pHide").onclick=()=>{ if(curPlace) startHide(curPlace); };
 $("clrRecent").onclick=()=>{ recents=[]; saveAll(); renderHome(); toast("Son aramalar temizlendi"); };
 $("clrPlaces").onclick=()=>{ saved={home:null,work:null,favs:[]}; saveAll(); renderHome(); toast("Kayıtlı yerler silindi"); };
 
@@ -727,10 +833,11 @@ map.on("touchstart",e=>{ if(e.originalEvent.touches.length!==1) return; const pt
 map.on("touchmove",e=>{ if(lp && (Math.abs(e.point.x-lp.pt.x)>10||Math.abs(e.point.y-lp.pt.y)>10)){ clearTimeout(lp.t); lp=null; } });
 ["touchend","touchcancel","dragstart","zoomstart"].forEach(ev=>map.on(ev,()=>{ if(lp){ clearTimeout(lp.t); lp=null; } }));
 map.on("contextmenu",e=>dropPin(e.lngLat));
-map.on("click",e=>{ if(view==="route"){ setPointFromMap(e.lngLat); } });
+map.on("click",e=>{ if(view==="route"){ setPointFromMap(e.lngLat); } else if(view==="hide"){ setHideCenter([e.lngLat.lat,e.lngLat.lng]); } });
 async function dropPin(lngLat){
   if(nav.active) return;
   if(view==="route"){ setPointFromMap(lngLat); return; }
+  if(view==="hide"){ setHideCenter([lngLat.lat,lngLat.lng]); return; }
   const p={name:"İşaretli Konum",addr:`${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`,ll:[lngLat.lat,lngLat.lng]};
   if(navigator.vibrate) navigator.vibrate(15);
   showPlace(p);
