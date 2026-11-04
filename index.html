@@ -262,6 +262,8 @@
         <div class="sec">Son Arananlar</div>
         <ul class="list" id="recents"></ul>
         <p class="note">İpucu: Haritada bir yere basılı tutarak işaret bırakabilirsin.</p>
+        <p class="note" id="dataDate" hidden></p>
+        <a class="btn" id="reportHome" href="https://www.openstreetmap.org/note/new" target="_blank" rel="noopener" style="width:100%;text-decoration:none;margin-top:4px">Haritada eksik veya yanlış yer bildir</a>
       </div>
       <div id="results" hidden>
         <div class="note" id="pickNote" hidden></div>
@@ -276,6 +278,7 @@
       <dl class="adm" id="pAdm" hidden></dl>
       <div class="btnrow" style="margin-bottom:8px"><button class="btn primary" id="pRoute">Yol Tarifi</button></div>
       <div class="btnrow" id="pSave"></div>
+      <a class="btn" id="pReport" target="_blank" rel="noopener" style="width:100%;text-decoration:none;margin-top:8px">Bu yer yanlış veya eksik mi? Bildir</a>
     </div>
 
     <!-- Yol tarifi -->
@@ -314,6 +317,8 @@
         <button class="btn danger" id="clrPlaces">Kayıtlı yerleri sil</button>
       </div>
       <p class="note">Kayıtlı yerler ve son aramalar sadece bu cihazda saklanır.</p>
+      <p class="note" id="dataDate2"></p>
+      <p class="note">Harita, arama ve rota bilgileri uygulamanın içinde saklanmaz; her açılışta OpenStreetMap'in güncel verisinden yüklenir. Arama birkaç dakika, harita görüntüsü yaklaşık bir hafta içinde güncellenir. Uydu fotoğrafları daha seyrek yenilenir, bazı bölgelerde birkaç yıl eski olabilir.</p>
       <p class="note">Harita verisi © OpenStreetMap katkıcıları · OpenFreeMap. Uydu görüntüsü © Esri, Maxar, Earthstar Geographics. Rota: OSRM (routing.openstreetmap.de). Arama: Nominatim. Hava durumu: Open-Meteo.</p>
       <p class="note">Otobüs ve metrobüs süreleri tahminidir. Binaların 3D yükseklikleri OpenStreetMap'teki kat/yükseklik bilgisinden gelir.</p>
     </div>
@@ -414,6 +419,11 @@ map.on("load",()=>{
   map.addLayer({id:"mb-line",type:"line",source:"mbline",layout:{"line-join":"round","line-cap":"round"},
     paint:{"line-color":"#d93025","line-width":["interpolate",["linear"],["zoom"],8,4,16,10],"line-opacity":.75}},firstSymbol);
   mapReady=true;
+  const readDate=()=>{ const src=map.getSource(bSource); const t=(src&&src.tiles&&src.tiles[0])||"";
+    const m=t.match(/(20\d{2})(\d{2})(\d{2})_\d{6}/); if(!m) return false;
+    const d=new Date(+m[1],+m[2]-1,+m[3]); const txt="Harita verisi tarihi: "+d.toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"})+" (OpenStreetMap)";
+    $("dataDate").textContent=txt; $("dataDate").hidden=false; $("dataDate2").textContent=txt; return true; };
+  if(!readDate()){ const h=e=>{ if(e.sourceId===bSource && readDate()) map.off("sourcedata",h); }; map.on("sourcedata",h); }
   applyMapType(mapType);
   readyQ.splice(0).forEach(f=>f());
   updateWeather();
@@ -679,7 +689,10 @@ $("clrPlaces").onclick=()=>{ saved={home:null,work:null,favs:[]}; saveAll(); ren
 /* ================= Yer kartı ================= */
 let selMarker=null, curPlace=null;
 function pinEl(color,label=""){ const el=document.createElement("div"); el.className="pinm"; el.style.background=color; el.innerHTML=`<span>${label}</span>`; return el; }
+const noteUrl=ll=>`https://www.openstreetmap.org/note/new#map=18/${ll[0].toFixed(5)}/${ll[1].toFixed(5)}`;
+map.on("moveend",()=>{ const c=map.getCenter(); $("reportHome").href=noteUrl([c.lat,c.lng]); });
 function renderAdm(p){
+  $("pReport").href=noteUrl(p.ll);
   const dl=$("pAdm"), a=p.adm; dl.innerHTML="";
   const rows=[["Ülke",a&&a.ulke],["İl",a&&a.il],["İlçe",a&&a.ilce],["Mahalle / Köy",a&&a.mahalle],["Cadde / Sokak",a&&a.sokak],["Posta kodu",a&&a.posta],
     ["Koordinat",`${p.ll[0].toFixed(5)}, ${p.ll[1].toFixed(5)}`]];
