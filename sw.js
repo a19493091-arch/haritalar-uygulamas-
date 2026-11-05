@@ -1,5 +1,5 @@
 // Uygulama dosyalarını önbelleğe alır; harita, rota ve arama verisi her zaman internetten gelir.
-const CACHE = "omniflow-v10";
+const CACHE = "omniflow-v11";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png",
   "./lib/maplibre-gl.js", "./lib/maplibre-gl.css"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
