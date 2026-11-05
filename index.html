@@ -516,6 +516,7 @@ function set3D(on,cam){
     map.setLayoutProperty("bina-3d","visibility",on?"visible":"none");
     map.setLayoutProperty("gizli-3d","visibility",on?"visible":"none");
     map.setLayoutProperty("mil-3d","visibility",on&&hideMil?"visible":"none");
+    if(map.getLayer("mil-dolu-3d")) map.setLayoutProperty("mil-dolu-3d","visibility",on?"visible":"none");
     if(on){ map.setMaxPitch(85); const z=map.getZoom();
       map.easeTo({pitch:60,bearing:map.getBearing()||-20,zoom:z<15?16.2:z,duration:1100});
       toast(z<15?"3D: binalar yükseklikleriyle gösteriliyor":"İki parmakla eğip döndürebilirsin");
@@ -769,11 +770,24 @@ function setupMilitary(src){
     // askeri havalimanları: ~2 km'lik bulut
     {id:"mil-hava",type:"circle","source-layer":"aerodrome_label",filter:["==",["get","class"],"military"],
       paint:{"circle-color":"#eef1f5","circle-blur":0.35,"circle-pitch-alignment":"map","circle-radius":["interpolate",["exponential",2],["zoom"],6,1.08,20,17750]}},
-    // adında savunma kurumu / askeri tesis geçen yerler: ~450 m'lik bulut
+    // adında savunma kurumu / askeri tesis geçen yerler: ~700 m'lik bulut
     {id:"mil-yer",type:"circle","source-layer":"poi",filter:nameHas(MIL_NAMES),
-      paint:{"circle-color":"#eef1f5","circle-blur":0.4,"circle-pitch-alignment":"map","circle-radius":["interpolate",["exponential",2],["zoom"],6,0.25,20,4100]}}
+      paint:{"circle-color":"#eef1f5","circle-blur":0.4,"circle-pitch-alignment":"map","circle-radius":["interpolate",["exponential",2],["zoom"],6,0.39,20,6370]}}
   ];
   layers.forEach(l=>{ l.source=src; l.layout={visibility:vis,...(l.layout||{})}; try{ map.addLayer(l); }catch(e){ console.warn("Katman eklenemedi",l.id,e); } });
+  // İçi boşluklu (delikli) askeri alanlar: sadece dış sınırı alıp içini TAMAMEN kapatan ikinci katman
+  map.addSource("mil-dolu",{type:"geojson",data:EMPTY});
+  map.addLayer({id:"mil-dolu-hale",type:"line",source:"mil-dolu",paint:{"line-color":"#eef1f5","line-width":["interpolate",["linear"],["zoom"],8,6,17,60],"line-blur":["interpolate",["linear"],["zoom"],8,6,17,50],"line-opacity":0.9}});
+  map.addLayer({id:"mil-dolu-bulut",type:"fill",source:"mil-dolu",paint:{"fill-pattern":"bulut","fill-opacity":1}});
+  map.addLayer({id:"mil-dolu-3d",type:"fill-extrusion",source:"mil-dolu",layout:{visibility:is3D?"visible":"none"},
+    paint:{"fill-extrusion-color":"#f6f7fa","fill-extrusion-height":180,"fill-extrusion-base":0,"fill-extrusion-opacity":0.97,"fill-extrusion-vertical-gradient":true}});
+  const refresh=()=>{ let fs=[]; try{ fs=map.querySourceFeatures(src,{sourceLayer:"landuse",filter:milArea}); }catch(e){ return; }
+    const seen=new Set(), polys=[];
+    fs.forEach(f=>{ const g=f.geometry; const outer=g.type==="Polygon"?[g.coordinates[0]]:g.type==="MultiPolygon"?g.coordinates.map(c=>c[0]):[];
+      outer.forEach(r=>{ if(!r||r.length<4) return; const k=r.length+":"+r[0].map(v=>v.toFixed(5)).join(",")+":"+r[Math.floor(r.length/2)].map(v=>v.toFixed(5)).join(",");
+        if(!seen.has(k)){ seen.add(k); polys.push({type:"Feature",properties:{},geometry:{type:"Polygon",coordinates:[r]}}); } }); });
+    map.getSource("mil-dolu").setData({type:"FeatureCollection",features:polys}); };
+  map.on("idle",refresh); map.on("sourcedata",debounce(e=>{ if(e&&e.sourceId===src) refresh(); },300));
 }
 
 /* ---- Bulanıklaştırma: alanın altındaki görüntüyü (uydu, bina, yazı) bulanıklaştırır ---- */
