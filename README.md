@@ -2,6 +2,7 @@
 OmniFlow Harita uygulaması - akıllı yol tarifi ve navigasyon
 
 ## Özellikler
+- **Uzaydan dünya:** Uzaklaştıkça dünya yıldızlı uzayda, atmosferiyle küre olarak görünür; parmakla sağa, sola, yukarı, aşağı ve çapraz çevrilebilir. Yaklaşınca düz haritaya geçer
 - Tam ekran harita: **Hibrit** (uydu + yollar ve isimler), **Uydu** ve **Standart** görünüm
 - Sol üstte bulunduğun yerin anlık hava durumu
 - Sağda yuvarlak düğmeler: **3D/2D**, harita türü, **Konumum** (pusula yönüyle mavi nokta)
@@ -20,7 +21,7 @@ OmniFlow Harita uygulaması - akıllı yol tarifi ve navigasyon
 - Telefon, tablet, iPhone, Surface Duo (çift ekran) ve bilgisayar uyumlu; ana ekrana eklenebilir (PWA)
 
 ## Kullanılan servisler (ücretsiz, anahtar gerektirmez)
-- Harita: [OpenFreeMap](https://openfreemap.org) vektör karoları, [MapLibre GL JS](https://maplibre.org) (lib/ klasöründe)
+- Harita: [OpenFreeMap](https://openfreemap.org) vektör karoları, [MapLibre GL JS](https://maplibre.org) 5.24 (lib/ klasöründe)
 - Rota: [routing.openstreetmap.de](https://routing.openstreetmap.de) (OSRM)
 - Uydu görüntüsü: Esri World Imagery
 - Adres arama: [Nominatim](https://nominatim.org)

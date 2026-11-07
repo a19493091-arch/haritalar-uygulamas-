@@ -36,7 +36,15 @@
   button{font-family:inherit;color:inherit}
   svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
   [hidden]{display:none!important}
-  #map{position:fixed;inset:0}
+  #map{position:fixed;inset:0;background-color:#02040b;
+    background-image:
+      radial-gradient(1px 1px at 12% 18%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 27% 73%,#cfe0ff 50%,transparent 51%),
+      radial-gradient(1.5px 1.5px at 41% 32%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 58% 84%,#fff 50%,transparent 51%),
+      radial-gradient(1px 1px at 66% 12%,#ffe9c4 50%,transparent 51%),radial-gradient(1.5px 1.5px at 79% 55%,#fff 50%,transparent 51%),
+      radial-gradient(1px 1px at 91% 28%,#cfe0ff 50%,transparent 51%),radial-gradient(1px 1px at 8% 92%,#fff 50%,transparent 51%),
+      radial-gradient(1px 1px at 35% 6%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 84% 91%,#fff 50%,transparent 51%),
+      radial-gradient(ellipse at 50% 50%,#0b1430 0%,#02040b 70%);
+    background-size:211px 211px,173px 173px,287px 287px,199px 199px,241px 241px,313px 313px,157px 157px,229px 229px,181px 181px,263px 263px,100% 100%}
   #probe{position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none}
 
   /* --- Hava durumu --- */
@@ -436,7 +444,7 @@ function busSeconds(m){ const km=m/1000, city=Math.min(km,30), inter=Math.max(km
 /* ================= Harita ================= */
 const map = new maplibregl.Map({
   container:"map", style:"https://tiles.openfreemap.org/styles/liberty",
-  center:[28.98,41.03], zoom:10, maxPitch:0, attributionControl:false
+  center:[28.98,41.03], zoom:10, minZoom:0, maxPitch:0, attributionControl:false, renderWorldCopies:false
 });
 map.addControl(new maplibregl.AttributionControl({compact:true,customAttribution:"Uydu © Esri, Maxar, Earthstar Geographics"}),"top-left");
 const collapseAttrib=()=>document.querySelectorAll(".maplibregl-ctrl-attrib").forEach(el=>el.classList.remove("maplibregl-compact-show"));
@@ -446,6 +454,12 @@ const EMPTY={type:"FeatureCollection",features:[]};
 const lineFC=(c,p={})=>({type:"FeatureCollection",features:c?[{type:"Feature",properties:p,geometry:{type:"LineString",coordinates:c.map(xy)}}]:[]});
 let baseLayers=[], is3D=false, mapType=store.get("mapType","hybrid");
 
+/* ---- Uzaydan küre görünümü: uzaklaşınca dünya küre olur, yaklaşınca düz haritaya geçer ---- */
+map.on("style.load",()=>{
+  try{ map.setProjection({type:"globe"}); }catch(e){ console.warn("Küre görünümü açılamadı",e); }
+  try{ map.setSky({"sky-color":"#0a1a3a","horizon-color":"#4f8fd8","fog-color":"#a9c8ef","sky-horizon-blend":0.5,"horizon-fog-blend":0.6,"fog-ground-blend":0.9,
+    "atmosphere-blend":["interpolate",["linear"],["zoom"],0,1,5,1,8,0]}); }catch(e){}
+});
 map.on("load",()=>{
   const layers=map.getStyle().layers;
   const bLayer=layers.find(l=>l["source-layer"]==="building");
@@ -804,8 +818,10 @@ function syncBlur(){
   while(blurEls.length>blurList.length) blurEls.pop().remove();
   updateBlur();
 }
+const BLUR_MINZOOM=9;
 function updateBlur(){
   if(!blurList.length) return;
+  if(map.getZoom()<BLUR_MINZOOM){ blurEls.forEach(e=>e.style.display="none"); return; }
   const W=map.getContainer().clientWidth, H=map.getContainer().clientHeight;
   const b=Math.max(10,Math.min(60,10*Math.pow(2,(map.getZoom()-13)*0.55)));
   blurList.forEach((h,i)=>{ const el=blurEls[i]; const pts=areaRing(h).map(c=>map.project(c));
@@ -836,6 +852,10 @@ function setupHidden(src){
     paint:{"line-color":"#f4f6f9","line-width":["interpolate",["linear"],["zoom"],10,4,17,26],"line-blur":["interpolate",["linear"],["zoom"],10,4,17,22],"line-opacity":0.95}});
   map.addLayer({id:"gizli-3d",type:"fill-extrusion",source:"gizli",filter:["==",["get","k"],"d"],layout:{visibility:is3D?"visible":"none"},
     paint:{"fill-extrusion-color":"#f6f7fa","fill-extrusion-height":["get","h"],"fill-extrusion-base":["get","b"],"fill-extrusion-opacity":0.97,"fill-extrusion-vertical-gradient":true}});
+  // Bulanık alanlar uzaktan (küre) bakınca bulutla kapanır
+  map.addSource("gizli-uzak",{type:"geojson",data:hideFC(allAreas().filter(isBlur))});
+  map.addLayer({id:"gizli-uzak-bulut",type:"fill",source:"gizli-uzak",maxzoom:BLUR_MINZOOM,filter:["==",["get","k"],"core"],paint:{"fill-pattern":"bulut","fill-opacity":1}});
+  map.addLayer({id:"gizli-uzak-kenar",type:"line",source:"gizli-uzak",maxzoom:BLUR_MINZOOM,filter:["==",["get","k"],"core"],paint:{"line-color":"#f4f6f9","line-width":6,"line-blur":5}});
   map.addLayer({id:"gizli-taslak",type:"line",source:"gizli-taslak",paint:{"line-color":"#0a7cff","line-width":3,"line-dasharray":[2,1.5]}});
   drawHidden();
 }
@@ -844,7 +864,7 @@ function drawHidden(){
   // Sadece kendi bulut alanlarına isim etiketi (bulanık ve herkes için gizli alanlarda isim gösterilmez)
   hidden.filter(h=>!isBlur(h)).forEach(h=>{ const el=document.createElement("div"); el.className="hidelabel"; el.textContent="☁️ "+(h.name||"Gizli alan");
     hideLabels.push(new maplibregl.Marker({element:el}).setLngLat(xy(h.ll)).addTo(map)); });
-  whenReady(()=>map.getSource("gizli").setData(hideFC(allAreas().filter(h=>!isBlur(h)))));
+  whenReady(()=>{ map.getSource("gizli").setData(hideFC(allAreas().filter(h=>!isBlur(h)))); map.getSource("gizli-uzak").setData(hideFC(allAreas().filter(isBlur))); });
   syncBlur();
 }
 function renderHiddenList(){
